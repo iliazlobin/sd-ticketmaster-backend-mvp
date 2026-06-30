@@ -1,0 +1,59 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ticketmaster
+      POSTGRES_PASSWORD: ticketmaster
+      POSTGRES_DB: ticketmaster
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ticketmaster"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  app:
+    build: .
+    ports:
+      - "${APP_PORT:-8010}:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://ticketmaster:ticketmaster@db:5432/ticketmaster
+      REDIS_URL: redis://redis:6379/0
+      # Seat-hold TTL: 600s (10 min) in production; the e2e/acceptance run overrides
+      # this to a few seconds so FR-7 (expired-hold release) verifies in bounded time.
+      SEAT_HOLD_TTL: ${SEAT_HOLD_TTL:-600}
+      # Demo seeding: OFF by default (production deploys keep their real data); the
+      # e2e/acceptance run sets SEED_DEMO_DATA=1 so the black-box suite finds events.
+      SEED_DEMO_DATA: ${SEED_DEMO_DATA:-0}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    command: >
+      sh -c "
+        PYTHONPATH=/app alembic upgrade head &&
+        PYTHONPATH=/app python -m ticketmaster.seed &&
+        uvicorn ticketmaster.main:app --host 0.0.0.0 --port 8000
+      "
+    restart: unless-stopped
+
+volumes:
+  pgdata:

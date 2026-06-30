@@ -1,0 +1,40 @@
+name: Functional
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: '0 6 * * *'  # daily at 06:00 UTC
+
+jobs:
+  functional:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ticketmaster
+          POSTGRES_PASSWORD: ticketmaster
+          POSTGRES_DB: ticketmaster
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install deps
+        run: pip install ".[dev]"
+      - name: Run migrations
+        env:
+          DATABASE_URL: postgresql+asyncpg://ticketmaster:ticketmaster@localhost:5432/ticketmaster
+        run: alembic upgrade head
+      - name: Run functional tests
+        env:
+          DATABASE_URL: postgresql+asyncpg://ticketmaster:ticketmaster@localhost:5432/ticketmaster
+        run: pytest tests/functional/ -v

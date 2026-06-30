@@ -1,0 +1,33 @@
+name: Lint
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: '0 6 * * *'  # daily at 06:00 UTC
+
+jobs:
+  ruff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/ruff-action@v1
+        with:
+          version: "0.8.0"
+          args: "check"
+      - uses: astral-sh/ruff-action@v1
+        with:
+          version: "0.8.0"
+          args: "format --check"
+
+  # Copilot Code Review — advisory, does not block
+  copilot-review:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Copilot Code Review (advisory)
+        uses: github/copilot-code-review@v1
+        continue-on-error: true
+        with:
+          fail_on_error: false
