@@ -23,6 +23,18 @@ jobs:
           --health-interval 5s
           --health-timeout 3s
           --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql+asyncpg://ticketmaster:ticketmaster@localhost:5432/ticketmaster
+      REDIS_URL: redis://localhost:6379/0
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -31,10 +43,27 @@ jobs:
       - name: Install deps
         run: pip install ".[dev]"
       - name: Run migrations
-        env:
-          DATABASE_URL: postgresql+asyncpg://ticketmaster:ticketmaster@localhost:5432/ticketmaster
         run: alembic upgrade head
+      - name: Seed demo data
+        run: SEED_DEMO_DATA=1 python -m ticketmaster.seed
+      - name: Start app server
+        run: |
+          uvicorn ticketmaster.main:app --host 0.0.0.0 --port 8000 &
+          echo $! > /tmp/app.pid
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8000/healthz > /dev/null 2>&1; then
+              echo "Server ready after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Server failed to start"
+          exit 1
       - name: Run functional tests
-        env:
-          DATABASE_URL: postgresql+asyncpg://ticketmaster:ticketmaster@localhost:5432/ticketmaster
         run: pytest tests/functional/ -v
+      - name: Stop app server
+        if: always()
+        run: |
+          if [ -f /tmp/app.pid ]; then
+            kill $(cat /tmp/app.pid) 2>/dev/null || true
+          fi

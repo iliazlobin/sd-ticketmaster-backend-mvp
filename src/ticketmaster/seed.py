@@ -45,9 +45,7 @@ async def seed() -> int:
     sessionmaker = async_sessionmaker(engine, expire_on_commit=False)
     try:
         async with sessionmaker() as session:
-            existing = (
-                await session.execute(select(func.count()).select_from(Event))
-            ).scalar_one()
+            existing = (await session.execute(select(func.count()).select_from(Event))).scalar_one()
             if existing:
                 print(f"[seed] {existing} event(s) already present — skipping demo seed")
                 return 0
