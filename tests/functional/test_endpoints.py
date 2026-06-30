@@ -4,12 +4,13 @@ Tests idempotency, ordering, pagination, ownership/auth, and validation/error pa
 Uses httpx.AsyncClient against the running FastAPI app.
 """
 
+import os
 import uuid
 
 import httpx
 import pytest
 
-API_BASE_URL = "http://localhost:8095"
+API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000")
 
 
 @pytest.fixture
